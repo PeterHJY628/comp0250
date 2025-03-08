@@ -43,6 +43,10 @@
  #include <geometry_msgs/Pose.h>
  #include <geometry_msgs/PoseStamped.h>
  #include <geometry_msgs/PointStamped.h>
+ #include <geometry_msgs/PoseArray.h>
+ #include <tf2_ros/transform_listener.h>
+ #include <tf2_sensor_msgs/tf2_sensor_msgs.h>
+ #include <geometry_msgs/TransformStamped.h>
  
  // PCL specific includes
  #include <pcl_conversions/pcl_conversions.h>
@@ -60,6 +64,7 @@
  #include <pcl/sample_consensus/model_types.h>
  #include <pcl/search/kdtree.h>
  #include <pcl/segmentation/sac_segmentation.h>
+ #include <pcl/segmentation/extract_clusters.h>
  
  // TF specific includes
  #include <tf/transform_broadcaster.h>
@@ -80,14 +85,14 @@ class ObjRec
       *
       * \input[in] nh the ROS node
       */
-    ObjRec (ros::NodeHandle &nh);
+    ObjRec(ros::NodeHandle &nh);
     
     /** \brief Point Cloud CallBack function.
       * 
       * \input[in] cloud_input a PointCloud2 sensor_msgs const pointer
       */
     void
-    cloudCallBackOne (const sensor_msgs::PointCloud2ConstPtr& cloud_input_msg);
+    cloudCallBackOne(const sensor_msgs::PointCloud2ConstPtr& cloud_input_msg);
     
     /** \brief Apply Voxel Grid filtering.
       * 
@@ -95,7 +100,7 @@ class ObjRec
       * \input[out] out_cloud_ptr the output PointCloud2 pointer
       */
     void
-    applyVX (PointCPtr &in_cloud_ptr,
+    applyVX(PointCPtr &in_cloud_ptr,
              PointCPtr &out_cloud_ptr);
 
     /** \brief Apply Pass Through filtering.
@@ -104,7 +109,7 @@ class ObjRec
       * \input[out] out_cloud_ptr the output PointCloud2 pointer
       */
     void
-    applyPT (PointCPtr &in_cloud_ptr,
+    applyPT(PointCPtr &in_cloud_ptr,
              PointCPtr &out_cloud_ptr);
     
     /** \brief Normal estimation.
@@ -112,60 +117,43 @@ class ObjRec
       * \input[in] in_cloud_ptr the input PointCloud2 pointer
       */
     void
-    findNormals (PointCPtr &in_cloud_ptr);
+    findNormals(PointCPtr &in_cloud_ptr);
     
     /** \brief Segment Plane from point cloud.
       * 
       * \input[in] in_cloud_ptr the input PointCloud2 pointer
       */
     void
-    segPlane (PointCPtr &in_cloud_ptr);
-    
-    /** \brief Segment Cylinder from point cloud.
-      * 
-      * \input[in] in_cloud_ptr the input PointCloud2 pointer
-      */
-    void
-    segCylind (PointCPtr &in_cloud_ptr);
+    segPlane(PointCPtr &in_cloud_ptr);
     
     /** \brief Segment Box from point cloud.
       * 
       * \input[in] in_cloud_ptr the input PointCloud2 pointer
       */
     void
-    segBox (PointCPtr &in_cloud_ptr);
-    
-    /** \brief Find the Pose of Cylinder.
+    segBox(PointCPtr &in_cloud_ptr);
+
+    /** \brief Segment Box from point cloud.
       * 
       * \input[in] in_cloud_ptr the input PointCloud2 pointer
       */
     void
-    findCylPose (PointCPtr &in_cloud_ptr);
-
-    /** \brief Find the Pose of Box.
-      * 
-      * \input[in] in_cloud_ptr the input PointCloud2 pointer
-      */
-    void
-    findBoxPose (PointCPtr &in_cloud_ptr);
-
-    
+    segColor(PointCPtr &in_cloud_ptr);
+    void findObjectsPose();
     /** \brief Point Cloud publisher.
       * 
       *  \input pc_pub ROS publisher
       *  \input pc point cloud to be published
       */
     void
-    pubFilteredPCMsg (ros::Publisher &pc_pub, PointC &pc);
+    pubFilteredPCMsg(ros::Publisher &pc_pub, PointC &pc);
     
-    /** \brief Publish the cylinder point.
+    /** \brief publish objects positions.
       * 
-      *  \input[in] cyl_pt_msg Cylinder's geometry point
-      *  
-      *  \output true if three numbers are added
+      * 
       */
-    void
-    publishPose (geometry_msgs::PointStamped &cyl_pt_msg);
+    void publishObjectsInfo();
+    
     
   public:
     /** \brief Node handle. */
@@ -176,12 +164,24 @@ class ObjRec
 
     /** \brief ROS publishers. */
     ros::Publisher g_pub_cloud;
+    ros::Publisher g_pub_cloud_red, g_pub_cloud_blue, g_pub_cloud_purple;
+
+    /** \brief box props */
+    Eigen::Vector4f red_box_pos, blue_box_pos, purple_box_pos;
+    bool box_found[3] = {false, false, false};
     
+    /** \brief block props */
+    std::vector<Eigen::Vector4f> block_pos;
+    int current_block_idx = 0;
+
     /** \brief ROS geometry message point. */
     geometry_msgs::PointStamped g_cyl_pt_msg, g_box_pt_msg;
 
     /** \brief ROS pose publishers. */
     ros::Publisher g_pub_pose;
+    ros::Publisher pub_box_poses_;
+    ros::Publisher pub_block_poses_;
+
     
     /** \brief Voxel Grid filter's leaf size. */
     double g_vg_leaf_sz;

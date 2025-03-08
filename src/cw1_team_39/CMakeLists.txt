@@ -15,6 +15,9 @@ find_package(catkin REQUIRED COMPONENTS
   moveit_ros_planning_interface
   tf2
   tf2_ros
+  sensor_msgs
+  tf2_sensor_msgs
+  tf2_geometry_msgs
   pcl_ros
   cw1_world_spawner
 )
