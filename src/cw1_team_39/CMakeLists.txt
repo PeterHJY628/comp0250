@@ -131,6 +131,7 @@ add_library(${PROJECT_NAME}_cw1_class_lib
   src/cw1_class.cpp
   src/obj_rec.cpp # Add the source file containing ObjRec class
   src/move_and_place.cpp
+  src/FindObjects.cpp
 )
 
 ## Add cmake target dependencies of the library

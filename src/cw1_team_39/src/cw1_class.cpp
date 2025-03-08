@@ -10,7 +10,8 @@
 
 cw1::cw1(ros::NodeHandle nh): nh_(nh),
   obj_rec(nh),
-  move_and_place(nh)
+  move_and_place(nh),
+  find_objects(nh)
 {
   t1_service_ = nh_.advertiseService("/task1_start", &cw1::t1_callback, this);
   t2_service_ = nh_.advertiseService("/task2_start", &cw1::t2_callback, this);
@@ -55,6 +56,7 @@ bool cw1::t3_callback(cw1_world_spawner::Task3Service::Request &request,
 {
   ROS_INFO("Task 3 callback triggered");
   // TODO
+  find_objects.visitAllPositions();
   return true;
 }
 

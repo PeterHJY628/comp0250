@@ -23,6 +23,7 @@
 #include "cw1_world_spawner/Task3Service.h"
 #include "obj_rec.h"
 #include "move_and_place.h"
+#include "FindObjects.h"
 
 class cw1
 {
@@ -60,6 +61,7 @@ private:
   ros::NodeHandle nh_;
   ObjRec obj_rec;
   MoveAndPlace move_and_place;
+  FindObjects find_objects;
   // Advertised services for tasks 1,2,3
   ros::ServiceServer t1_service_;
   ros::ServiceServer t2_service_;
