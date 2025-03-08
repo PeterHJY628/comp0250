@@ -66,6 +66,9 @@ private:
   ros::ServiceServer t1_service_;
   ros::ServiceServer t2_service_;
   ros::ServiceServer t3_service_;
+  tf2_ros::Buffer tfBuffer_;
+  tf::TransformListener tfListener_;
+  
 };
 
 #endif  // CW1_CLASS_H_
