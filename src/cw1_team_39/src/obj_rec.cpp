@@ -32,13 +32,13 @@
 *  POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include "obj_rec_tutorial.h"
+#include "obj_rec.h"
 typedef pcl::PointXYZRGBA PointT;
 typedef pcl::PointCloud<PointT> PointC; 
 typedef PointC::Ptr PointCPtr;
 
 ////////////////////////////////////////////////////////////////////////////////
-ObjRecTutorial::ObjRecTutorial (ros::NodeHandle &nh):
+ObjRec::ObjRec (ros::NodeHandle &nh):
   g_cloud_ptr (new PointC), // input point cloud
   g_cloud_filtered (new PointC), // filtered point cloud
   g_cloud_filtered2 (new PointC), // filtered point cloud
@@ -70,7 +70,7 @@ ObjRecTutorial::ObjRecTutorial (ros::NodeHandle &nh):
 
 ////////////////////////////////////////////////////////////////////////////////
 void
-ObjRecTutorial::cloudCallBackOne
+ObjRec::cloudCallBackOne
   (const sensor_msgs::PointCloud2ConstPtr &cloud_input_msg)
 {
   // Extract inout point cloud info
@@ -103,7 +103,7 @@ ObjRecTutorial::cloudCallBackOne
 
 ////////////////////////////////////////////////////////////////////////////////
 void
-ObjRecTutorial::applyVX (PointCPtr &in_cloud_ptr,
+ObjRec::applyVX (PointCPtr &in_cloud_ptr,
                       PointCPtr &out_cloud_ptr)
 {
   g_vx.setInputCloud (in_cloud_ptr);
@@ -115,7 +115,7 @@ ObjRecTutorial::applyVX (PointCPtr &in_cloud_ptr,
 
 ////////////////////////////////////////////////////////////////////////////////
 void
-ObjRecTutorial::applyPT (PointCPtr &in_cloud_ptr,
+ObjRec::applyPT (PointCPtr &in_cloud_ptr,
                       PointCPtr &out_cloud_ptr)
 {
   g_pt.setInputCloud (in_cloud_ptr);
@@ -128,7 +128,7 @@ ObjRecTutorial::applyPT (PointCPtr &in_cloud_ptr,
 
 ////////////////////////////////////////////////////////////////////////////////
 void
-ObjRecTutorial::findNormals (PointCPtr &in_cloud_ptr)
+ObjRec::findNormals (PointCPtr &in_cloud_ptr)
 {
   // Estimate point normals
   g_ne.setInputCloud (in_cloud_ptr);
@@ -141,7 +141,7 @@ ObjRecTutorial::findNormals (PointCPtr &in_cloud_ptr)
 
 ////////////////////////////////////////////////////////////////////////////////
 void
-ObjRecTutorial::segPlane (PointCPtr &in_cloud_ptr)
+ObjRec::segPlane (PointCPtr &in_cloud_ptr)
 {
   // Create the segmentation object for the planar model
   // and set all the params
@@ -180,7 +180,7 @@ ObjRecTutorial::segPlane (PointCPtr &in_cloud_ptr)
     
 ////////////////////////////////////////////////////////////////////////////////
 void
-ObjRecTutorial::segCylind (PointCPtr &in_cloud_ptr)
+ObjRec::segCylind (PointCPtr &in_cloud_ptr)
 {
   // Create the segmentation object for cylinder segmentation
   // and set all the parameters
@@ -212,7 +212,7 @@ ObjRecTutorial::segCylind (PointCPtr &in_cloud_ptr)
 }
 ////////////////////////////////////////////////////////////////////////////////
 void 
-ObjRecTutorial::segBox(PointCPtr &in_cloud_ptr)
+ObjRec::segBox(PointCPtr &in_cloud_ptr)
 {
   g_cloud_box->points.clear();
   float thresh = 0.1;
@@ -252,7 +252,7 @@ ObjRecTutorial::segBox(PointCPtr &in_cloud_ptr)
   ROS_INFO_STREAM("PointCloud representing the " << detected_color << " box component: " << g_cloud_box->size() << " data points.");
 }
 ////////////////////////////////////////////////////////////////////////////////
-void ObjRecTutorial::findCylPose (PointCPtr &in_cloud_ptr)
+void ObjRec::findCylPose (PointCPtr &in_cloud_ptr)
 {
   Eigen::Vector4f centroid_in;
   pcl::compute3DCentroid(*in_cloud_ptr, centroid_in);
@@ -284,7 +284,7 @@ void ObjRecTutorial::findCylPose (PointCPtr &in_cloud_ptr)
 
 ////////////////////////////////////////////////////////////////////////////////
 void
-ObjRecTutorial::findBoxPose (PointCPtr &in_cloud_ptr)
+ObjRec::findBoxPose (PointCPtr &in_cloud_ptr)
 {
   Eigen::Vector4f centroid_in;
   pcl::compute3DCentroid(*in_cloud_ptr, centroid_in);
@@ -316,7 +316,7 @@ ObjRecTutorial::findBoxPose (PointCPtr &in_cloud_ptr)
 
 ////////////////////////////////////////////////////////////////////////////////
 void
-ObjRecTutorial::pubFilteredPCMsg (ros::Publisher &pc_pub,
+ObjRec::pubFilteredPCMsg (ros::Publisher &pc_pub,
                                PointC &pc)
 {
   // Publish the data
@@ -328,7 +328,7 @@ ObjRecTutorial::pubFilteredPCMsg (ros::Publisher &pc_pub,
 
 ////////////////////////////////////////////////////////////////////////////////
 void
-ObjRecTutorial::publishPose (geometry_msgs::PointStamped &cyl_pt_msg)
+ObjRec::publishPose (geometry_msgs::PointStamped &cyl_pt_msg)
 {
   // Create and publish the cylinder pose (ignore orientation)
 
