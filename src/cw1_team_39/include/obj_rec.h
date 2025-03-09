@@ -44,8 +44,8 @@
  #include <geometry_msgs/PoseStamped.h>
  #include <geometry_msgs/PointStamped.h>
  #include <geometry_msgs/PoseArray.h>
- #include <tf2_ros/transform_listener.h>
- #include <tf2_sensor_msgs/tf2_sensor_msgs.h>
+//  #include <tf2_ros/transform_listener.h>
+//  #include <tf2_sensor_msgs/tf2_sensor_msgs.h>
  #include <geometry_msgs/TransformStamped.h>
  
  // PCL specific includes
@@ -172,6 +172,7 @@ class ObjRec
     
     /** \brief block props */
     std::vector<Eigen::Vector4f> block_pos;
+    std::vector<std::string> block_color;
     int current_block_idx = 0;
 
     /** \brief ROS geometry message point. */

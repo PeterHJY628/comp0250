@@ -53,56 +53,86 @@ cw1_world_spawner::Task2Service::Response &response)
 }
 
 bool cw1::t3_callback(cw1_world_spawner::Task3Service::Request &request,
-            cw1_world_spawner::Task3Service::Response &response)
+  cw1_world_spawner::Task3Service::Response &response)
 {
-  ROS_INFO("Task 3 callback triggered");
-  
-  // 每次等待一帧点云，这里用30 Hz循环只是为了演示
-  ros::Rate rate(30);
+ROS_INFO("Task 3 callback triggered");
 
-  while (ros::ok()) {
+// Create a global point cloud to accumulate merged clouds.
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr global_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+ros::Rate rate(30);
 
-  // 等待订阅 "/r200/camera/depth_registered/points" 话题
-  boost::shared_ptr<const sensor_msgs::PointCloud2> cloud_msg =
-    ros::topic::waitForMessage<sensor_msgs::PointCloud2>("/r200/camera/depth_registered/points", nh_);
+for (int i = 0; i < 5; i++) {
+// Move arm to position i.
+find_objects.visitPosition(i);
 
-  if (!cloud_msg) {
-    ROS_ERROR("Failed to receive point cloud message");
-    return false;
-  }
+// Wait for one point cloud message.
+boost::shared_ptr<const sensor_msgs::PointCloud2> cloud_msg =
+ros::topic::waitForMessage<sensor_msgs::PointCloud2>("/r200/camera/depth_registered/points", nh_);
 
-  // 获取变换
-  tf::StampedTransform transform;
-  try {
-    tfListener_.lookupTransform("world", cloud_msg->header.frame_id, ros::Time(0), transform);
-  } 
-  catch (tf::TransformException &ex) {
-    ROS_ERROR("Could NOT transform: %s", ex.what());
-    return false;
-  }
+if (!cloud_msg) {
+ROS_ERROR("Failed to receive point cloud message");
+return false;
+}
 
-  // 将点云变换到 world 坐标系
-  pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_transformed(new pcl::PointCloud<pcl::PointXYZRGB>);
-  pcl::PointCloud<pcl::PointXYZRGB>::Ptr temp_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+// Get the transformation from the point cloud frame to "world" frame.
+tf::StampedTransform transform;
+try {
+tfListener_.lookupTransform("world", cloud_msg->header.frame_id, ros::Time(0), transform);
+}
+catch (tf::TransformException &ex) {
+ROS_ERROR("Could NOT transform: %s", ex.what());
+return false;
+}
 
-  pcl::PCLPointCloud2 pcl_pc2;
-  pcl_conversions::toPCL(*cloud_msg, pcl_pc2);
-  pcl::fromPCLPointCloud2(pcl_pc2, *temp_cloud);
+// Convert sensor_msgs point cloud into PCL format.
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr local_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+pcl::PCLPointCloud2 pcl_pc2;
+pcl_conversions::toPCL(*cloud_msg, pcl_pc2);
+pcl::fromPCLPointCloud2(pcl_pc2, *local_cloud);
 
-  pcl_ros::transformPointCloud(*temp_cloud, *cloud_transformed, transform);
+// Transform the local point cloud to the "world" frame.
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_transformed(new pcl::PointCloud<pcl::PointXYZRGB>);
+pcl_ros::transformPointCloud(*local_cloud, *cloud_transformed, transform);
 
-  sensor_msgs::PointCloud2 cloud_publish;
-  pcl::toROSMsg(*cloud_transformed, cloud_publish);
-  cloud_publish.header = cloud_msg->header;
-  cloud_publish.header.frame_id = "world";
+// Merge the transformed local cloud into the global cloud.
+*global_cloud += *cloud_transformed;
 
-  // 现在 cloud_publish 就是以 "world" 为坐标系的点云
-  // 继续对转换好的点云做后续处理或发布
-  obj_rec.cloudCallBackOne(boost::make_shared<sensor_msgs::PointCloud2>(cloud_publish));
+rate.sleep();
+}
 
-  rate.sleep();
-  }
-  return true;
+// Convert the merged global point cloud back into a ROS message.
+sensor_msgs::PointCloud2 merged_cloud_msg;
+pcl::toROSMsg(*global_cloud, merged_cloud_msg);
+merged_cloud_msg.header.frame_id = "world";
+merged_cloud_msg.header.stamp = ros::Time::now();
+
+// Finally, process the merged point cloud with obj_rec.cloudCallBackOne.
+obj_rec.cloudCallBackOne(boost::make_shared<sensor_msgs::PointCloud2>(merged_cloud_msg));
+
+
+std::cout << "Debug info for obj_rec:" << std::endl;
+
+std::cout << "Red box position: " << obj_rec.red_box_pos.transpose() << std::endl;
+std::cout << "Blue box position: " << obj_rec.blue_box_pos.transpose() << std::endl;
+std::cout << "Purple box position: " << obj_rec.purple_box_pos.transpose() << std::endl;
+
+std::cout << "Red box found: " << (obj_rec.box_found[0] ? "true" : "false") << std::endl;
+std::cout << "Blue box found: " << (obj_rec.box_found[1] ? "true" : "false") << std::endl;
+std::cout << "Purple box found: " << (obj_rec.box_found[2] ? "true" : "false") << std::endl;
+
+std::cout << "Block positions:" << std::endl;
+for (size_t i = 0; i < obj_rec.block_pos.size(); ++i) {
+  std::cout << "  Block " << i << " position: " << obj_rec.block_pos[i].transpose() << std::endl;
+}
+
+std::cout << "Block colors:" << std::endl;
+for (size_t i = 0; i < obj_rec.block_color.size(); ++i) {
+  std::cout << "  Block " << i << " color: " << obj_rec.block_color[i] << std::endl;
+}
+
+std::cout << "Current block index: " << obj_rec.current_block_idx << std::endl;
+
+return true;
 }
 
 

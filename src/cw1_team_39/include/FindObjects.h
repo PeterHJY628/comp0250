@@ -21,6 +21,9 @@ public:
    */
   bool visitAllPositions();
 
+  
+bool visitPosition(size_t position_index);
+
 private:
   /**
    * @brief Moves the arm to the specified target pose.

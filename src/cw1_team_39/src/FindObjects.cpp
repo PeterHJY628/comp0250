@@ -108,3 +108,21 @@ bool FindObjects::visitAllPositions()
   ROS_INFO("Successfully visited all positions.");
   return true;
 }
+
+bool FindObjects::visitPosition(size_t position_index)
+{
+  if (position_index >= target_positions_.size())
+  {
+    ROS_ERROR("Invalid position index: %zu. Valid range is 0 to %zu.", position_index, target_positions_.size() - 1);
+    return false;
+  }
+
+  ROS_INFO("Moving to position %zu...", position_index + 1);
+  if (!moveArm(target_positions_[position_index]))
+  {
+    ROS_ERROR("Failed to move to position %zu", position_index + 1);
+    return false;
+  }
+  ros::Duration(1.0).sleep();  // Pause for a moment to observe the position
+  return true;
+}

@@ -332,6 +332,7 @@ ObjRec::segBox(PointCPtr &in_cloud_ptr)
   } else {
     // 如果是 block，则把中心存入 block_pos
     block_pos.push_back(centroid);
+    block_color.push_back(detected_color)
     // 如果想要索引或其他信息，也可以记录
     // current_block_idx++;
     ROS_INFO_STREAM("Detected block (color=" << detected_color << "), center = " << centroid.transpose());
