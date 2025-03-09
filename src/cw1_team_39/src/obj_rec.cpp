@@ -83,6 +83,15 @@ void
 ObjRec::cloudCallBackOne
   (const sensor_msgs::PointCloud2ConstPtr &cloud_input_msg)
 {
+  red_box_pos.setZero();
+  blue_box_pos.setZero();
+  purple_box_pos.setZero();
+  box_found[0] = false;
+  box_found[1] = false;
+  box_found[2] = false;
+  block_pos.clear();
+  block_color.clear();
+  current_block_idx = 0;
   // Extract inout point cloud info
   g_input_pc_frame_id_ = cloud_input_msg->header.frame_id;
     
