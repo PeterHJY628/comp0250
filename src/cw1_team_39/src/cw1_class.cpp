@@ -108,6 +108,7 @@ bool cw1::t2_callback(cw1_world_spawner::Task2Service::Request &request,
     ROS_WARN("Detected color: %s", detected_color.c_str());
   }
 
+  // TODO return result in vector format
   // Done - response.basket_colors now has one color string per basket_locs
   return true;
 }
