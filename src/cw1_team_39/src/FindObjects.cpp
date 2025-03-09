@@ -123,6 +123,5 @@ bool FindObjects::visitPosition(size_t position_index)
     ROS_ERROR("Failed to move to position %zu", position_index + 1);
     return false;
   }
-  ros::Duration(1.0).sleep();  // Pause for a moment to observe the position
   return true;
 }
