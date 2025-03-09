@@ -71,6 +71,43 @@ bool MoveAndPlace::moveArm(const geometry_msgs::Pose target_pose)
   }
 }
 
+bool MoveAndPlace::moveArm(const geometry_msgs::Pose target_pose, float width)
+{
+  ROS_INFO("Setting pose target");
+  arm_group_.setPoseTarget(target_pose);
+
+  if (width > gripper_open_)  width = gripper_open_;
+  if (width < gripper_closed_) width = gripper_closed_;
+
+  double eachJoint = width / 2.0;
+  std::vector<double> gripperJointTargets(2, eachJoint);
+
+  hand_group_.setJointValueTarget(gripperJointTargets);
+
+  std::string planning_frame = arm_group_.getPlanningFrame();
+  ROS_INFO("Planning frame: %s", planning_frame.c_str());
+
+  ROS_INFO("Attempting to plan the path for arm");
+  moveit::planning_interface::MoveGroupInterface::Plan arm_plan;
+  bool arm_success = (arm_group_.plan(arm_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
+
+  ROS_INFO("Attempting to plan the path for gripper");
+  moveit::planning_interface::MoveGroupInterface::Plan gripper_plan;
+  bool gripper_success = (hand_group_.plan(gripper_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
+
+  ROS_INFO("Visualising plan %s", (arm_success && gripper_success) ? "" : "FAILED");
+  if (arm_success && gripper_success)
+  {
+    arm_group_.move();
+    hand_group_.move();
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+
 bool MoveAndPlace::moveGripper(float width)
 {
   if (width > gripper_open_)  width = gripper_open_;
@@ -138,14 +175,14 @@ bool MoveAndPlace::performPickAndPlace(geometry_msgs::PoseStamped object_pose,
   ROS_WARN("Using corrected_orientation = (Down + 45deg in world) for pre_grasp/obj/place");
 
   // 5) 动作流程：先打开夹爪
-  if(!moveGripper(gripper_open_))
-  {
-    ROS_ERROR("Failed to open gripper before pick");
-    return false;
-  }
+  // if(!moveGripper(gripper_open_))
+  // {
+  //   ROS_ERROR("Failed to open gripper before pick");
+  //   return false;
+  // }
 
   // 6) 移动到 pre_grasp_pose
-  if(!moveArm(pre_grasp_pose.pose))
+  if(!moveArm(pre_grasp_pose.pose, gripper_open_))
   {
     ROS_ERROR("Failed to move arm to pre-grasp");
     return false;

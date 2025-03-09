@@ -23,6 +23,7 @@ public:
    * @return true if success
   */
   bool moveArm(const geometry_msgs::Pose target_pose);
+  bool moveArm(const geometry_msgs::Pose target_pose, float width);
 
   /**
    * @brief Move the gripper fingers to a certain width.
