@@ -37,18 +37,18 @@ cw1_world_spawner::Task2Service::Response &response)
 {
   ROS_INFO("Task 2 callback triggered");
   // Subscribe to the point cloud topic and get one message at 30fps
-  ros::Rate rate(30);
-  while (ros::ok()) {
-  boost::shared_ptr<const sensor_msgs::PointCloud2> cloud_msg =
-  ros::topic::waitForMessage<sensor_msgs::PointCloud2>("/r200/camera/depth_registered/points", nh_);
-  if (cloud_msg != nullptr) {
-  obj_rec.cloudCallBackOne(cloud_msg);
-  } else {
-  ROS_ERROR("Failed to receive point cloud message");
-  return false;
-  }
-  rate.sleep();
-  }
+  // ros::Rate rate(30);
+  // while (ros::ok()) {
+  // boost::shared_ptr<const sensor_msgs::PointCloud2> cloud_msg =
+  // ros::topic::waitForMessage<sensor_msgs::PointCloud2>("/r200/camera/depth_registered/points", nh_);
+  // if (cloud_msg != nullptr) {
+  // obj_rec.cloudCallBackOne(cloud_msg);
+  // } else {
+  // ROS_ERROR("Failed to receive point cloud message");
+  // return false;
+  // }
+  // rate.sleep();
+  // }
   return true;
 }
 
@@ -58,40 +58,80 @@ bool cw1::t3_callback(cw1_world_spawner::Task3Service::Request &request,
 ROS_INFO("Task 3 callback triggered");
 
 // Create a global point cloud to accumulate merged clouds.
-pcl::PointCloud<pcl::PointXYZRGB>::Ptr global_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr global_cloud(new pcl::PointCloud<pcl::PointXYZRGB>());
 ros::Rate rate(30);
 
-for (int i = 0; i < 5; i++) {
+// 1) Visit several positions and merge point clouds
+for (int i = 0; i < 5; i++)
+{
 // Move arm to position i.
 find_objects.visitPosition(i);
 
-// Wait for one point cloud message.
-boost::shared_ptr<const sensor_msgs::PointCloud2> cloud_msg =
-ros::topic::waitForMessage<sensor_msgs::PointCloud2>("/r200/camera/depth_registered/points", nh_);
+// --- [OPTIONAL] Small sleep to let the arm/camera settle ---
+ros::Duration(2.0).sleep();
 
-if (!cloud_msg) {
-ROS_ERROR("Failed to receive point cloud message");
+// ------------------------------------------------------------------------
+// Wait for a single NEW point cloud message (5 seconds as an example).
+// We do NOT flush in a loop. Instead, rely on "waitForMessage" once here.
+// ------------------------------------------------------------------------
+boost::shared_ptr<const sensor_msgs::PointCloud2> cloud_msg =
+ros::topic::waitForMessage<sensor_msgs::PointCloud2>(
+"/r200/camera/depth_registered/points", nh_, ros::Duration(5.0));
+
+if (!cloud_msg)
+{
+ROS_ERROR("Failed to receive fresh point cloud message within 5s at position %d", i);
 return false;
 }
 
 // Get the transformation from the point cloud frame to "world" frame.
+// We'll try to use the timestamp from the cloud message. If your system
+// publishes transforms with slight delay, you can loop a few times or
+// replace cloud_msg->header.stamp with ros::Time(0) for "latest".
 tf::StampedTransform transform;
-try {
-tfListener_.lookupTransform("world", cloud_msg->header.frame_id, ros::Time(0), transform);
+{
+bool gotTransform = false;
+const double max_tf_wait_secs = 5.0; // Wait up to 3s for TF
+ros::Time t_start = ros::Time::now();
+
+while ((ros::Time::now() - t_start).toSec() < max_tf_wait_secs)
+{
+try
+{
+// Try looking up the transform at the message's stamp
+tfListener_.lookupTransform("world",
+                  cloud_msg->header.frame_id,
+                  cloud_msg->header.stamp,  // or ros::Time(0)
+                  transform);
+gotTransform = true;
+break;
 }
-catch (tf::TransformException &ex) {
-ROS_ERROR("Could NOT transform: %s", ex.what());
+catch (tf::TransformException &ex)
+{
+ROS_WARN_THROTTLE(1.0, "Waiting for TF (world -> %s). Error: %s",
+        cloud_msg->header.frame_id.c_str(), ex.what());
+ros::Duration(0.1).sleep();
+}
+}
+
+if (!gotTransform)
+{
+ROS_ERROR("Could not get TF transform (world -> %s) in time, skipping.",
+cloud_msg->header.frame_id.c_str());
 return false;
+}
 }
 
 // Convert sensor_msgs point cloud into PCL format.
-pcl::PointCloud<pcl::PointXYZRGB>::Ptr local_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr local_cloud(new pcl::PointCloud<pcl::PointXYZRGB>());
+{
 pcl::PCLPointCloud2 pcl_pc2;
 pcl_conversions::toPCL(*cloud_msg, pcl_pc2);
 pcl::fromPCLPointCloud2(pcl_pc2, *local_cloud);
+}
 
 // Transform the local point cloud to the "world" frame.
-pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_transformed(new pcl::PointCloud<pcl::PointXYZRGB>);
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_transformed(new pcl::PointCloud<pcl::PointXYZRGB>());
 pcl_ros::transformPointCloud(*local_cloud, *cloud_transformed, transform);
 
 // Merge the transformed local cloud into the global cloud.
@@ -100,40 +140,127 @@ pcl_ros::transformPointCloud(*local_cloud, *cloud_transformed, transform);
 rate.sleep();
 }
 
-// Convert the merged global point cloud back into a ROS message.
+// 2) Convert the merged global point cloud back into a ROS message.
 sensor_msgs::PointCloud2 merged_cloud_msg;
 pcl::toROSMsg(*global_cloud, merged_cloud_msg);
 merged_cloud_msg.header.frame_id = "world";
 merged_cloud_msg.header.stamp = ros::Time::now();
 
-// Finally, process the merged point cloud with obj_rec.cloudCallBackOne.
+// 3) Process the merged point cloud with obj_rec.
 obj_rec.cloudCallBackOne(boost::make_shared<sensor_msgs::PointCloud2>(merged_cloud_msg));
 
+// 4) Debug info:
+ROS_INFO("---- Debug info for obj_rec ----");
+ROS_INFO_STREAM("Red box position: " << obj_rec.red_box_pos.transpose());
+ROS_INFO_STREAM("Blue box position: " << obj_rec.blue_box_pos.transpose());
+ROS_INFO_STREAM("Purple box position: " << obj_rec.purple_box_pos.transpose());
 
-std::cout << "Debug info for obj_rec:" << std::endl;
+ROS_INFO_STREAM("Red box found: "    << (obj_rec.box_found[0] ? "true" : "false"));
+ROS_INFO_STREAM("Blue box found: "   << (obj_rec.box_found[1] ? "true" : "false"));
+ROS_INFO_STREAM("Purple box found: " << (obj_rec.box_found[2] ? "true" : "false"));
 
-std::cout << "Red box position: " << obj_rec.red_box_pos.transpose() << std::endl;
-std::cout << "Blue box position: " << obj_rec.blue_box_pos.transpose() << std::endl;
-std::cout << "Purple box position: " << obj_rec.purple_box_pos.transpose() << std::endl;
-
-std::cout << "Red box found: " << (obj_rec.box_found[0] ? "true" : "false") << std::endl;
-std::cout << "Blue box found: " << (obj_rec.box_found[1] ? "true" : "false") << std::endl;
-std::cout << "Purple box found: " << (obj_rec.box_found[2] ? "true" : "false") << std::endl;
-
-std::cout << "Block positions:" << std::endl;
-for (size_t i = 0; i < obj_rec.block_pos.size(); ++i) {
-  std::cout << "  Block " << i << " position: " << obj_rec.block_pos[i].transpose() << std::endl;
+ROS_INFO("Block positions:");
+for (size_t i = 0; i < obj_rec.block_pos.size(); ++i)
+{
+ROS_INFO_STREAM("  Block " << i << " position: " << obj_rec.block_pos[i].transpose());
 }
 
-std::cout << "Block colors:" << std::endl;
-for (size_t i = 0; i < obj_rec.block_color.size(); ++i) {
-  std::cout << "  Block " << i << " color: " << obj_rec.block_color[i] << std::endl;
+ROS_INFO("Block colors:");
+for (size_t i = 0; i < obj_rec.block_color.size(); ++i)
+{
+ROS_INFO_STREAM("  Block " << i << " color: " << obj_rec.block_color[i]);
 }
 
-std::cout << "Current block index: " << obj_rec.current_block_idx << std::endl;
+ROS_INFO_STREAM("Current block index: " << obj_rec.current_block_idx);
+ROS_INFO("--------------------------------");
+
+// 5) For each recognized block, pick it from its position and place it on the box of matching color.
+for (size_t i = 0; i < obj_rec.block_pos.size(); ++i)
+{
+const std::string &color = obj_rec.block_color[i];
+
+// Prepare pick point
+geometry_msgs::Point pick_point;
+pick_point.x = obj_rec.block_pos[i](0);
+pick_point.y = obj_rec.block_pos[i](1);
+pick_point.z = obj_rec.block_pos[i](2);
+
+geometry_msgs::Point place_point;
+
+// Decide which box to place on based on color
+if (color == "red")
+{
+if (!obj_rec.box_found[0])
+{
+ROS_WARN("Red box not found! Skipping block %zu (color red).", i);
+continue;
+}
+place_point.x = obj_rec.red_box_pos(0);
+place_point.y = obj_rec.red_box_pos(1);
+place_point.z = obj_rec.red_box_pos(2);
+}
+else if (color == "blue")
+{
+if (!obj_rec.box_found[1])
+{
+ROS_WARN("Blue box not found! Skipping block %zu (color blue).", i);
+continue;
+}
+place_point.x = obj_rec.blue_box_pos(0);
+place_point.y = obj_rec.blue_box_pos(1);
+place_point.z = obj_rec.blue_box_pos(2);
+}
+else if (color == "purple")
+{
+if (!obj_rec.box_found[2])
+{
+ROS_WARN("Purple box not found! Skipping block %zu (color purple).", i);
+continue;
+}
+place_point.x = obj_rec.purple_box_pos(0);
+place_point.y = obj_rec.purple_box_pos(1);
+place_point.z = obj_rec.purple_box_pos(2);
+}
+else
+{
+ROS_WARN("Unknown block color '%s' for block %zu. Skipping.", color.c_str(), i);
+continue;
+}
+
+ROS_INFO("Picking block %zu (color %s) from (%.3f, %.3f, %.3f) -> place at (%.3f, %.3f, %.3f)",
+i, color.c_str(),
+pick_point.x, pick_point.y, pick_point.z,
+place_point.x, place_point.y, place_point.z);
+
+// 6) Attempt the pick-and-place.
+geometry_msgs::PoseStamped pick_pose;
+pick_pose.header.frame_id = "world";
+pick_pose.header.stamp = ros::Time::now();
+pick_pose.pose.position = pick_point;
+pick_pose.pose.position.z = 0.02;
+pick_pose.pose.orientation.w = 1.0; // Identity orientation
+
+geometry_msgs::PointStamped place_point_stamped;
+place_point_stamped.header.frame_id = "world";
+place_point_stamped.header.stamp = ros::Time::now();
+place_point_stamped.point = place_point;
+
+bool success = move_and_place.performPickAndPlace(pick_pose, place_point_stamped);
+if (!success)
+{
+ROS_ERROR("Failed to pick and place block %zu (color %s).", i, color.c_str());
+}
+else
+{
+ROS_INFO("Successfully picked and placed block %zu (color %s).", i, color.c_str());
+}
+}
 
 return true;
 }
+
+
+
 
 
 // ========== 机械臂 / 手爪动作的具体实现不变 ==========
