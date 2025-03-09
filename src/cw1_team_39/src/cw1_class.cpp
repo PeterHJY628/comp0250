@@ -56,6 +56,8 @@ bool cw1::t3_callback(cw1_world_spawner::Task3Service::Request &request,
             cw1_world_spawner::Task3Service::Response &response)
 {
   ROS_INFO("Task 3 callback triggered");
+
+  find_objects.visitAllPositions();
   
   // 每次等待一帧点云，这里用30 Hz循环只是为了演示
   ros::Rate rate(30);
