@@ -26,90 +26,100 @@ bool cw1::t1_callback(cw1_world_spawner::Task1Service::Request &request,
                       cw1_world_spawner::Task1Service::Response &response)
 {
   ROS_INFO("Task 1 callback triggered");
-  return move_and_place.performPickAndPlace(request.object_loc, request.goal_loc);
+  bool success = move_and_place.performPickAndPlace(request.object_loc, request.goal_loc);
+  if(success){
+    ROS_INFO("Pick and Place succeeded");
+  }
+  return true;
 }
 
 bool cw1::t2_callback(cw1_world_spawner::Task2Service::Request &request,
-                      cw1_world_spawner::Task2Service::Response &response)
+            cw1_world_spawner::Task2Service::Response &response)
 {
   ROS_INFO("Task 2 callback triggered");
 
   std::vector<geometry_msgs::PointStamped> basket_locs = request.basket_locs;
+  response.basket_colours.clear();  // Ensure the output vector is empty
   for (size_t i = 0; i < basket_locs.size(); ++i)
   {
-    tf2::Quaternion downQ, yawQ, finalQ;
+  tf2::Quaternion downQ, yawQ, finalQ;
 
-    downQ.setRPY(-M_PI, 0.0, 0.0);
-    yawQ.setRPY(0.0, 0.0, M_PI / 4.0); // 45 deg
+  downQ.setRPY(-M_PI, 0.0, 0.0);
+  yawQ.setRPY(0.0, 0.0, M_PI / 4.0); // 45 deg
 
-    finalQ = yawQ * downQ;
-    finalQ.normalize(); // 归一化
+  finalQ = yawQ * downQ;
+  finalQ.normalize(); // Normalize the quaternion
 
-    // 把它变成 geometry_msgs/Quaternion
-    geometry_msgs::Quaternion corrected_orientation = tf2::toMsg(finalQ);
+  // Convert it to a geometry_msgs::Quaternion
+  geometry_msgs::Quaternion corrected_orientation = tf2::toMsg(finalQ);
 
-    // ====================== 4) place pose ======================
-    geometry_msgs::PoseStamped place_pose;
-    place_pose.header = basket_locs[i].header;
-    place_pose.pose.position = basket_locs[i].point;
-    place_pose.pose.position.z += 0.30;
-    place_pose.pose.orientation = corrected_orientation;
+  // ====================== 4) place pose ======================
+  geometry_msgs::PoseStamped place_pose;
+  place_pose.header = basket_locs[i].header;
+  place_pose.pose.position = basket_locs[i].point;
+  place_pose.pose.position.z += 0.30;
+  place_pose.pose.orientation = corrected_orientation;
 
-    if (!move_and_place.moveArm(place_pose.pose))
+  if (!move_and_place.moveArm(place_pose.pose))
+  {
+    ROS_ERROR("Failed to move arm to place pose");
+    // If the arm movement fails, register "none" for this basket and move to the next
+    response.basket_colours.push_back("none");
+    continue;
+  }
+  
+  // detect color
+  ros::Time t0 = ros::Time::now();
+  boost::shared_ptr<const sensor_msgs::PointCloud2> tmp_msg;
+  while (ros::ok())
+  {
+    tmp_msg = ros::topic::waitForMessage<sensor_msgs::PointCloud2>(
+      "/r200/camera/depth_registered/points", nh_, ros::Duration(5.0));
+    if (!tmp_msg)
     {
-      ROS_ERROR("Failed to move arm to place pose");
-      return false;
+    ROS_ERROR("Failed to receive point cloud message within 5 seconds, retrying...");
+    continue;
     }
-    // detect color
-    ros::Time t0 = ros::Time::now();
-    boost::shared_ptr<const sensor_msgs::PointCloud2> tmp_msg;
-    while (ros::ok())
+    if (tmp_msg->header.stamp <= t0)
     {
-      tmp_msg = ros::topic::waitForMessage<sensor_msgs::PointCloud2>(
-          "/r200/camera/depth_registered/points", nh_, ros::Duration(5.0));
-      if (!tmp_msg)
-      {
-        ROS_ERROR("Failed to receive point cloud message within 5 seconds, retrying...");
-        continue;
-      }
-      if (tmp_msg->header.stamp <= t0)
-      {
-        ROS_WARN("Stale point cloud received (stamp: %.3f, t0: %.3f), retrying...",
-                 tmp_msg->header.stamp.toSec(), t0.toSec());
-        continue;
-      }
-      break;
+    ROS_WARN("Stale point cloud received (stamp: %.3f, t0: %.3f), retrying...",
+         tmp_msg->header.stamp.toSec(), t0.toSec());
+    continue;
     }
-    boost::shared_ptr<const sensor_msgs::PointCloud2> cloud_msg = tmp_msg;
-    // Convert sensor_msgs::PointCloud2 to pcl::PointCloud<pcl::PointXYZRGBA>
-    pcl::PCLPointCloud2 pcl_pc2;
-    pcl_conversions::toPCL(*cloud_msg, pcl_pc2);
-    pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloud_rgb(new pcl::PointCloud<pcl::PointXYZRGBA>());
-    pcl::fromPCLPointCloud2(pcl_pc2, *cloud_rgb);
-    // Process the point cloud through segmentation.
-    obj_rec.segColor(cloud_rgb);
+    break;
+  }
+  boost::shared_ptr<const sensor_msgs::PointCloud2> cloud_msg = tmp_msg;
+  // Convert sensor_msgs::PointCloud2 to pcl::PointCloud<pcl::PointXYZRGBA>
+  pcl::PCLPointCloud2 pcl_pc2;
+  pcl_conversions::toPCL(*cloud_msg, pcl_pc2);
+  pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloud_rgb(new pcl::PointCloud<pcl::PointXYZRGBA>());
+  pcl::fromPCLPointCloud2(pcl_pc2, *cloud_rgb);
+  // Process the point cloud through segmentation.
+  obj_rec.segColor(cloud_rgb);
 
-    // Retrieve the number of points segmented for each color.
-    size_t num_red = obj_rec.g_cloud_red->points.size();
-    size_t num_blue = obj_rec.g_cloud_blue->points.size();
-    size_t num_purple = obj_rec.g_cloud_purple->points.size();
+  // Retrieve the number of points segmented for each color.
+  size_t num_red = obj_rec.g_cloud_red->points.size();
+  size_t num_blue = obj_rec.g_cloud_blue->points.size();
+  size_t num_purple = obj_rec.g_cloud_purple->points.size();
 
-    ROS_WARN("Basket index %zu: Segmented points - Red: %zu, Blue: %zu, Purple: %zu", i, num_red, num_blue, num_purple);
+  ROS_WARN("Basket index %zu: Segmented points - Red: %zu, Blue: %zu, Purple: %zu",
+       i, num_red, num_blue, num_purple);
 
-    // Determine which color has been detected (i.e. has more than 0 points).
-    std::string detected_color = "none";
-    if (num_red > 0)
-      detected_color = "red";
-    else if (num_blue > 0)
-      detected_color = "blue";
-    else if (num_purple > 0)
-      detected_color = "purple";
+  // Determine which color has been detected (i.e., more than 0 points)
+  std::string detected_color = "none";
+  if (num_red > 0)
+    detected_color = "red";
+  else if (num_blue > 0)
+    detected_color = "blue";
+  else if (num_purple > 0)
+    detected_color = "purple";
 
-    ROS_WARN("Detected color: %s", detected_color.c_str());
+  ROS_WARN("Detected color: %s", detected_color.c_str());
+
+  // Store the detected color for the current basket; order preserved as in basket_locs
+  response.basket_colours.push_back(detected_color);
   }
 
-  // TODO return result in vector format
-  // Done - response.basket_colors now has one color string per basket_locs
   return true;
 }
 
