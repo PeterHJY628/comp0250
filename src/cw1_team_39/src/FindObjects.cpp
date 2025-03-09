@@ -11,54 +11,60 @@ FindObjects::FindObjects(ros::NodeHandle &nh)
   arm_group_.setPlanningTime(10.0);
   arm_group_.setPoseReferenceFrame("panda_link0");
 
-  // Initialize the list of 5 predefined target positions.
-  // Only the positions are defined here. The orientation is set to the identity (no rotation).
-  geometry_msgs::Pose pose;
-
+  // ------------------------------------------------------------
+  // Create the "down + 45° around Z" orientation (same as move_and_place)
+  // ------------------------------------------------------------
+  // 先翻转180° (roll = -M_PI)，让Z轴朝下
+  // 再绕Z轴 +45° (yaw = M_PI/4)
+  // 最后归一化
   tf2::Quaternion downQ, yawQ, finalQ;
-  // 或者 roll = -M_PI, pitch=0, yaw=0 也可以，只要保证“朝下”
-  downQ.setRPY(-M_PI, 0.0, 0.0);   
-  yawQ.setRPY(0.0, 0.0, M_PI/4.0); // 45 deg
-  // tf docs: final = yawQ * downQ => 先应用 down，再叠加 yaw
-  finalQ = yawQ * downQ;
-  finalQ.normalize(); // 归一化
+  downQ.setRPY(-M_PI, 0.0, 0.0);        // Roll = -π
+  yawQ.setRPY(0.0, 0.0, M_PI / 4.0);    // Yaw = π/4
+  finalQ = yawQ * downQ;               // Apply downQ first, then yawQ
+  finalQ.normalize();
 
-  // 把它变成 geometry_msgs/Quaternion
+  // 转成 geometry_msgs::Quaternion
   geometry_msgs::Quaternion corrected_orientation = tf2::toMsg(finalQ);
 
-  // Position 1: (0.29, -0.34, 0.5)
+  // ------------------------------------------------------------
+  // Initialize the list of 5 predefined target positions
+  // and use the same orientation for all.
+  // ------------------------------------------------------------
+  geometry_msgs::Pose pose;
+
+  // Position 1
   pose.position.x = 0.29;
   pose.position.y = -0.34;
   pose.position.z = 0.6;
-//   pose.orientation.x = 1;
-//   pose.orientation.y = 0;
-//   pose.orientation.z = 0;
-//   pose.orientation.w = 0;
   pose.orientation = corrected_orientation;
   target_positions_.push_back(pose);
 
-  // Position 2: (0.29, 0.34, 0.5)
+  // Position 2
   pose.position.x = 0.29;
   pose.position.y = 0.34;
   pose.position.z = 0.6;
+  pose.orientation = corrected_orientation;
   target_positions_.push_back(pose);
 
-  // Position 3: (0.6, 0.34, 0.5)
+  // Position 3
   pose.position.x = 0.6;
   pose.position.y = 0.34;
   pose.position.z = 0.6;
+  pose.orientation = corrected_orientation;
   target_positions_.push_back(pose);
 
-  // Position 4: (0.6, -0.34, 0.5)
+  // Position 4
   pose.position.x = 0.6;
   pose.position.y = -0.34;
   pose.position.z = 0.6;
+  pose.orientation = corrected_orientation;
   target_positions_.push_back(pose);
 
-  // Position 5: (0.445, 0, 0.5)
+  // Position 5
   pose.position.x = 0.445;
   pose.position.y = 0.0;
   pose.position.z = 0.6;
+  pose.orientation = corrected_orientation;
   target_positions_.push_back(pose);
 }
 
@@ -83,7 +89,7 @@ bool FindObjects::moveArm(const geometry_msgs::Pose target_pose)
   if (success)
   {
     arm_group_.move();
-    ros::Duration(1.0).sleep(); // Wait for a moment to ensure the motion completes
+    ros::Duration(1.0).sleep(); // Wait for the motion to complete
     return true;
   }
   else
@@ -103,7 +109,7 @@ bool FindObjects::visitAllPositions()
       ROS_ERROR("Failed to move to position %zu", i + 1);
       return false;
     }
-    ros::Duration(1.0).sleep();  // Pause for a moment to observe the position
+    ros::Duration(1.0).sleep();  // Pause to observe the position
   }
   ROS_INFO("Successfully visited all positions.");
   return true;
@@ -113,7 +119,9 @@ bool FindObjects::visitPosition(size_t position_index)
 {
   if (position_index >= target_positions_.size())
   {
-    ROS_ERROR("Invalid position index: %zu. Valid range is 0 to %zu.", position_index, target_positions_.size() - 1);
+    ROS_ERROR("Invalid position index: %zu. Valid range is 0 to %zu.",
+              position_index,
+              target_positions_.size() - 1);
     return false;
   }
 
